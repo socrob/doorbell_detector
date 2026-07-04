@@ -1,0 +1,5 @@
+tensorflow
+tensorflow-hub
+scipy
+sounddevice
+numpy==1.26.4
