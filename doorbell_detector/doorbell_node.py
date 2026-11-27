@@ -221,14 +221,28 @@ def main():
         from audio_common_msgs.msg import AudioStamped
 
         def on_audio(msg):
-            try:
-                samples = np.frombuffer(bytes(msg.audio.data), dtype=np.int16).astype(np.float32) / 32768.0
-            except Exception:
+            # audio_common_msgs/AudioStamped: the samples are in audio.audio_data, in the
+            # array that matches audio.info.format (int16 or float32 here)
+            audio_data = msg.audio.audio_data
+            if len(audio_data.int16_data) > 0:
+                samples = np.asarray(audio_data.int16_data, dtype=np.float32) / 32768.0
+            elif len(audio_data.float32_data) > 0:
+                samples = np.asarray(audio_data.float32_data, dtype=np.float32)
+            else:
+                node.get_logger().warn(
+                    "audio message without int16 or float32 samples; ignored",
+                    throttle_duration_sec=5.0,
+                )
                 return
             rate = int(getattr(msg.audio.info, "rate", 0) or 0)
             process_samples(samples, rate)
 
-        node.create_subscription(AudioStamped, args.audio, on_audio, 50)
+        # Best effort receives from reliable and best-effort publishers alike (audio
+        # bridges often publish with sensor-data QoS); a reliable subscription gets
+        # nothing from a best-effort publisher
+        from rclpy.qos import QoSProfile, ReliabilityPolicy
+        audio_qos = QoSProfile(depth=50, reliability=ReliabilityPolicy.BEST_EFFORT)
+        node.create_subscription(AudioStamped, args.audio, on_audio, audio_qos)
         node.get_logger().info(f"listening on ROS topic {args.audio}, publishing on {args.out}")
     else:
         device = args.device
